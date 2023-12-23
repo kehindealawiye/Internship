@@ -1,12 +1,23 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[46]:
 
 
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
@@ -14,18 +25,18 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV
 
 
-# In[5]:
+# In[30]:
 
 
 # Load the dataset
-url = "https://github.com/FlipRoboTechnologies/ML-Datasets/raw/main/Red%20Wine/winequality-red.csv"
-wine_data = pd.read_csv(url)
+
+wine_data = pd.read_csv(r'C:\Users\ENVY\OneDrive\Documents\red_wine.csv')
 
 # Explore the dataset
 print(wine_data.head())
 
 
-# In[ ]:
+# In[73]:
 
 
 # Preprocess the data
@@ -34,34 +45,58 @@ X = wine_data.drop(['quality', 'good_wine'], axis=1)
 y = wine_data['good_wine']
 
 
-# In[ ]:
+# In[72]:
+
+
+print(wine_data['good_wine'])
+
+
+# In[75]:
+
+
+# Visualize the distribution of 'good_wine' column
+plt.figure(figsize=(8, 6))
+sns.countplot(x='good_wine', data=wine_data)
+plt.title('Distribution of Good Wine')
+plt.xlabel('Good Wine (1) vs. Not Good Wine (0)')
+plt.ylabel('Count')
+plt.show()
+
+
+# In[76]:
 
 
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+
+# In[77]:
+
+
+# Replace NaN values with the mean of each column
+imputer = SimpleImputer(strategy='mean')
+X_train_imputed = imputer.fit_transform(X_train)
+X_test_imputed = imputer.transform(X_test)
+
+
+# In[78]:
+
+
 # Build a Decision Tree model
 dt_classifier = DecisionTreeClassifier(random_state=42)
 
+# Train the model using the imputed training data
+dt_classifier.fit(X_train_imputed, y_train)
 
-# In[ ]:
+# Make predictions on the test set using the imputed test data
+y_pred = dt_classifier.predict(X_test_imputed)
 
-
-# Hyperparameter tuning using GridSearchCV
-param_grid = {'max_depth': [3, 5, 7, 9],
-              'min_samples_split': [2, 5, 10],
-              'min_samples_leaf': [1, 2, 4]}
-
-grid_search = GridSearchCV(dt_classifier, param_grid, cv=5, scoring='roc_auc')
-grid_search.fit(X_train, y_train)
-best_params = grid_search.best_params_
-
-# Train the model with the best parameters
-best_dt_classifier = DecisionTreeClassifier(**best_params, random_state=42)
-best_dt_classifier.fit(X_train, y_train)
+# Evaluate the model's performance
+accuracy = accuracy_score(y_test, y_pred)
+print("Accuracy on the test set:", accuracy)
 
 
-# In[ ]:
+# In[44]:
 
 
 # Exploratory Data Analysis (EDA)
@@ -75,42 +110,57 @@ plt.title('Correlation Matrix')
 plt.show()
 
 
-# In[ ]:
+# In[47]:
 
 
-# Cross-Validation
-cv_scores = cross_val_score(best_dt_classifier, X_train, y_train, cv=5, scoring='roc_auc')
-print("Cross-Validation Scores:", cv_scores)
-print("Mean AUC from Cross-Validation: {:.2f}".format(np.mean(cv_scores)))
+# Create a list of classifiers
+classifiers = [
+    DecisionTreeClassifier(),
+    RandomForestClassifier(),
+    GradientBoostingClassifier(),
+    SVC(probability=True)  # SVC with probability estimates for ROC AUC
+]
+
+# Iterate through classifiers
+for classifier in classifiers:
+    # Replace NaN values with the mean of each column
+    imputer = SimpleImputer(strategy='mean')
+    X_train_imputed = imputer.fit_transform(X_train)
+    
+    # Train the classifier
+    classifier.fit(X_train_imputed, y_train)
+
+    # Use cross_val_score with the trained classifier
+    cv_scores = cross_val_score(classifier, X_train_imputed, y_train, cv=5, scoring='roc_auc')
+
+    print(f"Classifier: {classifier.__class__.__name__}")
+    print("Cross-Validation Scores:", cv_scores)
+    print("Mean AUC from Cross-Validation: {:.2f}".format(np.mean(cv_scores)))
+    print("\n")
 
 
-# In[ ]:
+# In comparing the classifiers, the RandomForestClassifier stands out as the most promising choice with consistently high cross-validation scores, yielding a mean AUC of approximately 0.91. This classifier demonstrates robust and reliable performance across different folds. The GradientBoostingClassifier also performs well, though slightly less than the Random Forest, with a mean AUC of 0.88. The DecisionTreeClassifier exhibits moderate performance, with a mean AUC of 0.70, suggesting room for improvement. The Support Vector Classifier (SVC) lags slightly behind with a mean AUC of 0.82. The choice among these classifiers depends on specific preferences and trade-offs between predictive accuracy, interpretability, and computational complexity, with the RandomForestClassifier appearing as a strong contender for its overall high performance.
+
+# In[62]:
 
 
-# Feature Importance
-feature_importance = best_dt_classifier.feature_importances_
-feature_names = X.columns
-feature_importance_df = pd.DataFrame({'Feature': feature_names, 'Importance': feature_importance})
-feature_importance_df = feature_importance_df.sort_values(by='Importance', ascending=False)
+from sklearn.inspection import permutation_importance
 
-plt.figure(figsize=(10, 6))
-sns.barplot(x='Importance', y='Feature', data=feature_importance_df)
-plt.title('Feature Importance')
-plt.show()
+# Assuming svc_classifier is your trained SVC model
+from sklearn.metrics import roc_curve, auc, roc_auc_score, confusion_matrix
 
-
-# In[ ]:
-
+# Assuming 'classifier' is your trained SVC model
+# Replace 'classifier' with the actual variable name if it's different
 
 # Predict on the test set
-y_pred_prob = best_dt_classifier.predict_proba(X_test)[:, 1]
+y_pred_prob = classifier.decision_function(X_test_imputed)  # Replace 'decision_function' with 'predict_proba' if using probabilities
 
 # Calculate ROC curve and AUC
 fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
 roc_auc = auc(fpr, tpr)
 
 
-# In[ ]:
+# In[63]:
 
 
 # Visualize ROC curve
@@ -124,11 +174,11 @@ plt.legend(loc='lower right')
 plt.show()
 
 
-# In[ ]:
+# In[65]:
 
 
 # Confusion Matrix
-y_pred = best_dt_classifier.predict(X_test)
+y_pred = classifier.predict(X_test_imputed)
 cm = confusion_matrix(y_test, y_pred)
 
 plt.figure(figsize=(6, 4))
@@ -139,11 +189,15 @@ plt.ylabel('Actual')
 plt.show()
 
 
-# In[ ]:
+# In[66]:
 
 
 # Evaluate the model
-accuracy = best_dt_classifier.score(X_test, y_test)
+accuracy = classifier.score(X_test_imputed, y_test)
 print("Accuracy: {:.2f}".format(accuracy))
 print("AUC: {:.2f}".format(roc_auc))
 
+
+# The machine learning model achieved an accuracy of 85% and an Area Under the Curve (AUC) of 82% in determining whether a wine is classified as 'good' based on its physiochemical properties. An accuracy of 85% suggests that the model correctly predicted the wine quality for the majority of the instances in the test set. The AUC of 82% indicates a good discriminatory ability, illustrating the model's effectiveness in distinguishing between positive and negative cases. These metrics collectively suggest a reasonably successful application of machine learning to assess the quality of wine using its physiochemical features, providing confidence in the model's predictive capabilities.
+
+# In[ ]:
